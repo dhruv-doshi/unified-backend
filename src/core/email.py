@@ -1,27 +1,29 @@
-import httpx
+import smtplib
+import asyncio
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 from src.core.config import settings
 from src.core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
+def _send_sync(to: str, subject: str, html_body: str) -> None:
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USERNAME}>"
+    msg["To"] = to
+    msg.attach(MIMEText(html_body, "html"))
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as s:
+        s.starttls()
+        s.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        s.sendmail(settings.SMTP_USERNAME, [to], msg.as_string())
+
+
 async def _send_email(to: str, subject: str, html_body: str) -> None:
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.resend.com/emails",
-                headers={
-                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "from": f"Shoot Right <{settings.RESEND_FROM_EMAIL}>",
-                    "to": [to],
-                    "subject": subject,
-                    "html": html_body,
-                },
-            )
-            response.raise_for_status()
+        await asyncio.to_thread(_send_sync, to, subject, html_body)
         logger.info("email_sent", to=to, subject=subject)
     except Exception as e:
         logger.error("email_send_failed", to=to, error=str(e))
