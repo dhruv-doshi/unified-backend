@@ -44,7 +44,7 @@ async def register(db: AsyncSession, name: str, email: str, password: str) -> Au
         name=name,
         email=email,
         hashed_password=hash_password(password),
-        is_verified=False,
+        is_verified=True,  # auto-verify until email delivery is working
     )
     db.add(user)
     await db.flush()
