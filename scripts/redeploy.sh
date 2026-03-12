@@ -8,7 +8,7 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$APP_DIR"
 
-DC="docker compose -f docker-compose.prod.yml"
+DC="docker compose -f docker-compose.prod.yml --env-file .env.prod"
 
 echo "==> Pulling latest code..."
 git pull origin prod
