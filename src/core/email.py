@@ -1,6 +1,4 @@
-import aiosmtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import httpx
 from src.core.config import settings
 from src.core.logging import get_logger
 
@@ -8,27 +6,26 @@ logger = get_logger(__name__)
 
 
 async def _send_email(to: str, subject: str, html_body: str) -> None:
-    message = MIMEMultipart("alternative")
-    message["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USERNAME}>"
-    message["To"] = to
-    message["Subject"] = subject
-    message.attach(MIMEText(html_body, "html"))
-
     try:
-        use_tls = settings.SMTP_PORT == 465
-        await aiosmtplib.send(
-            message,
-            hostname=settings.SMTP_HOST,
-            port=settings.SMTP_PORT,
-            username=settings.SMTP_USERNAME,
-            password=settings.SMTP_PASSWORD,
-            start_tls=not use_tls,
-            use_tls=use_tls,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "from": f"Shoot Right <{settings.RESEND_FROM_EMAIL}>",
+                    "to": [to],
+                    "subject": subject,
+                    "html": html_body,
+                },
+            )
+            response.raise_for_status()
         logger.info("email_sent", to=to, subject=subject)
     except Exception as e:
         logger.error("email_send_failed", to=to, error=str(e))
-        raise
+        # email is non-fatal — app continues without it
 
 
 async def send_verification_email(to: str, name: str, token: str) -> None:
