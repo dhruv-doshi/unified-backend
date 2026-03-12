@@ -328,10 +328,11 @@ Fill in **all** values. Required secrets:
 |---|---|
 | `SECRET_KEY` | `python3 -c "import secrets; print(secrets.token_hex(32))"` |
 | `DB_PASSWORD` | `python3 -c "import secrets; print(secrets.token_urlsafe(24))"` |
-| `CLOUDFLARE_R2_ACCOUNT_ID` | Cloudflare dashboard → R2 → your bucket |
-| `CLOUDFLARE_R2_ACCESS_KEY_ID` | Cloudflare dashboard → R2 → Manage R2 API Tokens |
-| `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | Same as above |
-| `CLOUDFLARE_R2_BUCKET_NAME` | Name of your R2 bucket |
+| `R2_ENDPOINT_URL` | `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` — find Account ID in Cloudflare dashboard → R2 |
+| `R2_ACCESS_KEY_ID` | Cloudflare dashboard → R2 → Manage R2 API Tokens |
+| `R2_SECRET_ACCESS_KEY` | Same as above |
+| `R2_BUCKET_NAME` | Name of your R2 bucket |
+| `R2_PUBLIC_BASE_URL` | Public domain you've attached to the bucket (e.g. `https://cdn.example.com`) |
 | `OPENROUTER_API_KEY` | [openrouter.ai](https://openrouter.ai) → Keys |
 | `SENDGRID_API_KEY` | [sendgrid.com](https://sendgrid.com) → Settings → API Keys |
 | `GOOGLE_CLIENT_ID` | Google Cloud Console → APIs & Services → Credentials |

@@ -69,6 +69,13 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 
+# Wait for any automatic apt lock to clear (cloud-init / unattended-upgrades runs on fresh droplets)
+echo "  Waiting for apt lock to clear..."
+while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+  echo "  apt lock held — waiting 5 s..."
+  sleep 5
+done
+
 sudo apt-get update -y
 sudo apt-get upgrade -y \
   -o Dpkg::Options::="--force-confdef" \
@@ -78,7 +85,7 @@ sudo apt-get upgrade -y \
 sudo apt-get install -y ca-certificates curl gnupg lsb-release git fail2ban unattended-upgrades
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
   https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
@@ -175,6 +182,8 @@ read -rp "Press Enter once you have added the deploy key to GitHub..."
 
 ssh "$DEPLOY_USER@$SERVER_IP" bash -s << ENDSSH
 set -e
+# Trust GitHub's host key
+ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
 # Refresh docker group without logout
 newgrp docker << 'INNERSH'
 cd /srv/app
