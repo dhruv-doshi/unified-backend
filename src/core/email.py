@@ -15,10 +15,17 @@ def _send_sync(to: str, subject: str, html_body: str) -> None:
     msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USERNAME}>"
     msg["To"] = to
     msg.attach(MIMEText(html_body, "html"))
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as s:
-        s.starttls()
-        s.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-        s.sendmail(settings.SMTP_USERNAME, [to], msg.as_string())
+    if settings.SMTP_PORT == 465:
+        # Implicit TLS (SMTPS)
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT) as s:
+            s.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+            s.sendmail(settings.SMTP_USERNAME, [to], msg.as_string())
+    else:
+        # STARTTLS (port 587)
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as s:
+            s.starttls()
+            s.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+            s.sendmail(settings.SMTP_USERNAME, [to], msg.as_string())
 
 
 async def _send_email(to: str, subject: str, html_body: str) -> None:

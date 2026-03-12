@@ -26,13 +26,10 @@ if [[ -z "$SMTP_USERNAME" || "$SMTP_PASSWORD" == "CHANGE_ME_APP_PASSWORD" ]]; th
 fi
 
 send_email() {
-    local subject="$1"
-    local html="$2"
-    python3 - <<PYEOF
-import smtplib, sys
+    python3 - <<'PYEOF'
+import smtplib, sys, os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import os
 
 smtp_host = os.environ["SMTP_HOST"]
 smtp_port = int(os.environ["SMTP_PORT"])
@@ -50,10 +47,15 @@ msg["To"]      = recipient
 msg.attach(MIMEText(html_body, "html"))
 
 try:
-    with smtplib.SMTP(smtp_host, smtp_port) as s:
-        s.starttls()
-        s.login(smtp_user, smtp_pass)
-        s.sendmail(smtp_user, [recipient], msg.as_string())
+    if smtp_port == 465:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port) as s:
+            s.login(smtp_user, smtp_pass)
+            s.sendmail(smtp_user, [recipient], msg.as_string())
+    else:
+        with smtplib.SMTP(smtp_host, smtp_port) as s:
+            s.starttls()
+            s.login(smtp_user, smtp_pass)
+            s.sendmail(smtp_user, [recipient], msg.as_string())
     print("OK")
 except Exception as e:
     print(f"FAIL: {e}", file=sys.stderr)
@@ -76,7 +78,7 @@ export _TEST_HTML="<h2>Welcome to Shoot Right, Test User!</h2>
 <a href=\"${FRONTEND_URL}/verify-email?token=test-token-12345\" style=\"background:#6366f1;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;\">Verify Email</a>
 <p>This link expires in 24 hours.</p>"
 
-if send_email "$_TEST_SUBJECT" "$_TEST_HTML" > /dev/null; then
+if send_email > /dev/null; then
     echo "✓ verification email sent"
 else
     echo "✗ verification email FAILED"
@@ -89,7 +91,7 @@ export _TEST_HTML="<h2>Password Reset Request</h2>
 <a href=\"${FRONTEND_URL}/reset-password?token=test-token-67890\" style=\"background:#6366f1;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;\">Reset Password</a>
 <p>This link expires in 1 hour.</p>"
 
-if send_email "$_TEST_SUBJECT" "$_TEST_HTML" > /dev/null; then
+if send_email > /dev/null; then
     echo "✓ password reset email sent"
 else
     echo "✗ password reset email FAILED"
