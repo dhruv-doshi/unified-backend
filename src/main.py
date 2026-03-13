@@ -36,7 +36,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    _origins = list({settings.FRONTEND_URL, "http://localhost:3000"})
+    _origins = list({o.strip() for o in settings.FRONTEND_URL.split(",") if o.strip()} | {"http://localhost:3000"})
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_origins,

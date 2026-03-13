@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "Shoot Right"
 
     # App
+    # Comma-separated list of allowed origins, e.g. "https://app.vercel.app,http://localhost:3000"
     FRONTEND_URL: str = "http://localhost:3000"
     GOOGLE_CLIENT_ID: str = ""
     ENVIRONMENT: str = "development"
