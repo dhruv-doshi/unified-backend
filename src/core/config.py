@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     UPLOAD_RATE_LIMIT: int = 10
     IMPROVEMENT_RATE_LIMIT: int = 3
 
+    # Research Digest
+    ARXIV_MAX_RESULTS: int = 50
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_min_length(cls, v: str) -> str:
