@@ -95,6 +95,23 @@ services:
       seed:
         condition: service_completed_successfully
 
+  beat:
+    build: .
+    restart: unless-stopped
+    command: celery -A src.workers.celery_app beat --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/unified_backend
+      SYNC_DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/unified_backend
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+
   nginx:
     image: nginx:alpine
     restart: unless-stopped

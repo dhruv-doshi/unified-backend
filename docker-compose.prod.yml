@@ -96,6 +96,23 @@ services:
         limits:
           memory: 384m
 
+  beat:
+    build: .
+    restart: unless-stopped
+    command: celery -A src.workers.celery_app beat --loglevel=info
+    env_file: .env.prod
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
   nginx:
     image: nginx:alpine
     restart: unless-stopped
