@@ -9,12 +9,9 @@ from src.core.config import settings
 from src.core.logging import get_logger
 from src.core.exceptions import NotFoundError
 from src.infrastructure.models.paper import Paper
+from src.apps.research_digest_config import DEFAULT_MODEL, EMBEDDING_MODEL, EMBEDDING_DIM, AI_QUERY_SYSTEM_PROMPT
 
 logger = get_logger(__name__)
-
-DEFAULT_MODEL = "google/gemini-2.0-flash-001"
-EMBEDDING_MODEL = "openai/text-embedding-ada-002"
-EMBEDDING_DIM = 1536
 
 
 async def _embed_text(text_content: str) -> list[float] | None:
@@ -203,17 +200,8 @@ async def ai_query(db: AsyncSession, query: str, limit: int = 5) -> tuple[str, l
     payload = {
         "model": DEFAULT_MODEL,
         "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are a research assistant. Use the provided paper abstracts to answer "
-                    "the user's question. Cite papers by their arXiv ID. Be concise and accurate."
-                ),
-            },
-            {
-                "role": "user",
-                "content": f"Question: {query}\n\nRelevant papers:\n{context}",
-            },
+            {"role": "system", "content": AI_QUERY_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Question: {query}\n\nRelevant papers:\n{context}"},
         ],
     }
 

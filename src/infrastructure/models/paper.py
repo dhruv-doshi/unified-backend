@@ -12,7 +12,8 @@ class Paper(Base, TimestampMixin):
 
     __tablename__ = "papers"
     __table_args__ = (
-        Index("ix_papers_search_gin", "search_vector", postgresql_using="gin"),
+        Index("ix_papers_search_gin", "search_vector", postgresql_using="gin",
+              info={"skip_on_sqlite": True}),
         Index("ix_papers_arxiv_id", "arxiv_id", unique=True),
     )
 
