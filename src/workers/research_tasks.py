@@ -4,16 +4,9 @@ from src.workers.celery_app import celery_app
 from src.core.config import settings
 from src.core.logging import get_logger
 from src.domain.research import service as research_service
+from src.apps.research_digest_config import DAILY_FETCH_JOBS
 
 logger = get_logger(__name__)
-
-# Topics fetched daily — covers major AI/ML research areas
-DAILY_FETCH_JOBS = [
-    {"query": "large language models", "categories": ["cs.CL", "cs.AI"]},
-    {"query": "computer vision deep learning", "categories": ["cs.CV"]},
-    {"query": "reinforcement learning", "categories": ["cs.LG", "cs.AI"]},
-    {"query": "diffusion models generative", "categories": ["cs.CV", "cs.LG"]},
-]
 
 
 async def _run_all_fetches() -> int:

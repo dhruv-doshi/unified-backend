@@ -19,7 +19,11 @@ async def engine():
         poolclass=StaticPool,
     )
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        # Exclude PostgreSQL-only tables (TSVECTOR, pgvector) — they cannot be
+        # compiled against SQLite. Research integration tests require a real
+        # Postgres instance and are not run in this suite.
+        sqlite_tables = [t for t in Base.metadata.sorted_tables if t.name != "papers"]
+        await conn.run_sync(Base.metadata.create_all, tables=sqlite_tables)
     yield engine
     await engine.dispose()
 
