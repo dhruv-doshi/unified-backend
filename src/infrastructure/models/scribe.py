@@ -17,3 +17,6 @@ class ScribeSession(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending|completed|failed
     app_name: Mapped[str] = mapped_column(String(100), nullable=False, default="med_scribe")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)  # User-editable session name
+    doctor_notes_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # MCQ answers
+    transcription_segments: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Audit trail

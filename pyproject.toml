@@ -29,6 +29,10 @@ dependencies = [
     "google-auth[requests]>=2.29.0",
     "pgvector>=0.3.0",
     "arxiv>=2.1.0",
+    "transformers>=4.40.0",
+    "torch>=2.0.0",
+    "librosa>=0.10.0",
+    "soundfile>=0.12.1",
 ]
 
 [project.optional-dependencies]
