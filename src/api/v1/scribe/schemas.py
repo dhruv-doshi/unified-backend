@@ -66,7 +66,7 @@ class DoctorSuggestion(BaseModel):
 
 class DoctorSuggestionAnswer(BaseModel):
     suggestion_id: str
-    selected_option: str | None = None
+    selected_options: list[str] = []
     custom_answer: str = ""
 
 

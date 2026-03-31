@@ -497,8 +497,8 @@ async def test_doctor_answers_success(client):
     # Save doctor answers
     answers_payload = {
         "answers": [
-            {"suggestion_id": "sugg-1", "selected_option": "Crackles", "custom_answer": ""},
-            {"suggestion_id": "sugg-2", "selected_option": "Yes", "custom_answer": ""},
+            {"suggestion_id": "sugg-1", "selected_options": ["Crackles"], "custom_answer": ""},
+            {"suggestion_id": "sugg-2", "selected_options": ["Yes"], "custom_answer": ""},
         ]
     }
 
@@ -513,7 +513,7 @@ async def test_doctor_answers_success(client):
     assert data["success"] is True
     assert "doctor_answers" in data["data"]
     assert len(data["data"]["doctor_answers"]) == 2
-    assert data["data"]["doctor_answers"][0]["selected_option"] == "Crackles"
+    assert data["data"]["doctor_answers"][0]["selected_options"] == ["Crackles"]
 
 
 @pytest.mark.asyncio
@@ -547,7 +547,7 @@ async def test_doctor_answers_invalid_id(client):
     session_id = create_response.json()["data"]["id"]
 
     # Try to save with invalid suggestion ID
-    answers_payload = {"answers": [{"suggestion_id": "invalid-id", "selected_option": "Option", "custom_answer": ""}]}
+    answers_payload = {"answers": [{"suggestion_id": "invalid-id", "selected_options": ["Option"], "custom_answer": ""}]}
 
     response = await client.post(
         f"/api/v1/scribe/{session_id}/doctor-answers",

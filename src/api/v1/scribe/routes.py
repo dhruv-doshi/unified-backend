@@ -73,7 +73,7 @@ async def transcribe_chunk(
     audio: UploadFile = File(...),
     user_id: uuid.UUID = Depends(get_verified_user_id),
 ):
-    """Transcribe a short audio chunk (~10s). Fast path for real-time recording, returns raw text only."""
+    """Transcribe a short audio chunk (up to ~25s). Fast path for real-time recording, returns raw text only."""
     audio_bytes = await audio.read()
     result = await scribe_service.transcribe_audio_chunk(user_id, audio_bytes, audio.content_type)
     return success_response(result, "Chunk transcribed")
