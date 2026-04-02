@@ -55,8 +55,9 @@ services:
   api:
     build: .
     restart: unless-stopped
-    # 2 workers fits within 2 GB RAM (DO $12 plan); increase to 4 on 4 GB+ plans
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 2
+    # 1 worker required on 2 GB plan — Whisper model (~600MB) + 2 workers = OOM
+    # Increase to 2 workers on 4 GB+ plans (also increase memory limit below)
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 1
     env_file: .env.prod
     depends_on:
       db:
