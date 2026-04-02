@@ -9,8 +9,8 @@ git pull origin prod
 
 DC="docker compose -f docker-compose.prod.yml --env-file .env.prod"
 
-echo "==> Rebuilding api and worker containers..."
-$DC build --no-cache api worker
+echo "==> Rebuilding api, worker, and migrate containers..."
+$DC build --no-cache api worker migrate
 
 echo "==> Starting all services..."
 $DC up -d --remove-orphans
