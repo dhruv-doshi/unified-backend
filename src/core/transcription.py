@@ -1,6 +1,7 @@
-import torch
-import tempfile
+import io
 import os
+import tempfile
+import httpx
 from abc import ABC, abstractmethod
 from src.core.config import settings
 from src.core.logging import get_logger
@@ -8,7 +9,7 @@ from src.core.logging import get_logger
 logger = get_logger(__name__)
 
 # Global provider instance — loaded once, shared across all requests
-_provider_instance: "LocalWhisperProvider | None" = None
+_provider_instance: "SarvamAIProvider | None" = None
 
 _CONTENT_TYPE_SUFFIX = {
     "audio/webm": ".webm",
@@ -17,70 +18,40 @@ _CONTENT_TYPE_SUFFIX = {
     "audio/mp4": ".m4a",
 }
 
+_CHUNK_SAMPLES = 25 * 16000   # 25s at 16kHz — 5s buffer below Sarvam's 30s limit
+_STRIDE_SAMPLES = 5 * 16000   # 5s overlap between consecutive windows
+
 
 class TranscriptionProvider(ABC):
     """Abstract base for transcription providers."""
 
     @abstractmethod
     async def transcribe(self, audio_bytes: bytes, content_type: str) -> str:
-        """Transcribe full audio (long-form, any duration) and return raw transcript text."""
+        """Transcribe full audio (any duration) and return raw transcript text."""
         pass
 
     @abstractmethod
     async def transcribe_chunk(self, audio_bytes: bytes, content_type: str) -> str:
-        """Transcribe a short audio chunk (~10s). Fast path, no chunking overhead."""
+        """Transcribe a short audio chunk (≤25s). Fast path for real-time recording."""
         pass
 
 
-_CHUNK_SAMPLES = 30 * 16000   # 30s at 16kHz — max window WhisperFeatureExtractor accepts
-_STRIDE_SAMPLES = 5 * 16000   # 5s overlap between consecutive windows
+class SarvamAIProvider(TranscriptionProvider):
+    """Transcription via Sarvam AI Real-time REST API (https://api.sarvam.ai/speech-to-text).
 
-
-class LocalWhisperProvider(TranscriptionProvider):
-    """Loads Whisper model locally using the transformers library.
-
-    Long-form audio (any duration): manually splits the numpy audio array into
-    overlapping 30s windows BEFORE passing to AutoProcessor, so each slice is
-    safely within the processor's hard 30s cap. This bypasses the silent
-    truncation that AutoProcessor applies to inputs longer than 480,000 samples.
-
-    Short chunks (~10s): single-pass inference, no splitting needed.
-
-    Supports both OpenAI Whisper and fine-tuned variants like
-    Oriserve/Whisper-Hindi2Hinglish-Swift for Hindi/Hinglish transcription.
+    transcribe()       — full audio (any length): splits into ≤25s WAV windows with 5s
+                         overlap, sends each to Sarvam, stitches results together.
+    transcribe_chunk() — live 25s WebM chunks: sends raw bytes directly, no splitting needed.
     """
 
     def __init__(self):
-        self.model_name = settings.TRANSCRIPTION_MODEL
-        self.model = None
-        self.processor = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self._load_model()
-
-    def _load_model(self):
-        """Load model + processor for direct inference."""
-        try:
-            from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
-
-            logger.info(f"Loading transcription model: {self.model_name}")
-
-            dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-            self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
-                self.model_name,
-                dtype=dtype,
-                low_cpu_mem_usage=True,
-            )
-            self.model.to(self.device)
-            self.processor = AutoProcessor.from_pretrained(self.model_name)
-
-            logger.info(f"Model loaded on device: {self.device}")
-        except Exception as e:
-            logger.error(f"Failed to load transcription model: {str(e)}", exc_info=True)
-            raise ValueError(f"Failed to load model {self.model_name}: {str(e)}")
+        self.api_key = settings.SARVAM_API_KEY
+        self.endpoint = "https://api.sarvam.ai/speech-to-text"
+        self.model = "saaras:v3"
+        self.language_code = settings.SARVAM_LANGUAGE_CODE
 
     def _load_audio(self, audio_bytes: bytes, content_type: str):
-        """Save audio bytes to a temp file and load as 16kHz numpy array via librosa."""
+        """Load audio bytes → 16kHz mono numpy array via librosa."""
         import librosa
 
         suffix = _CONTENT_TYPE_SUFFIX.get(content_type, ".webm")
@@ -89,108 +60,91 @@ class LocalWhisperProvider(TranscriptionProvider):
             with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                 tmp.write(audio_bytes)
                 tmp_path = tmp.name
-
-            audio_data, _ = librosa.load(tmp_path, sr=16000)
+            audio_data, _ = librosa.load(tmp_path, sr=16000, mono=True)
             duration_s = len(audio_data) / 16000
-            logger.info(f"Audio loaded: {len(audio_data)} samples at 16000Hz ({duration_s:.1f}s)")
+            logger.info(f"Audio loaded: {len(audio_data)} samples ({duration_s:.1f}s)")
             return audio_data
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
-    def _run_inference_chunk(self, audio_chunk) -> str:
-        """Single-pass inference on a ≤30s audio slice. Safe from processor truncation."""
-        inputs = self.processor(
-            audio_chunk,
-            sampling_rate=16000,
-            return_tensors="pt",
-        ).to(self.device)
+    def _audio_to_wav_bytes(self, audio_data) -> bytes:
+        """Convert numpy audio array → WAV bytes for Sarvam API."""
+        import soundfile as sf
 
-        with torch.no_grad():
-            predicted_ids = self.model.generate(**inputs)
+        buf = io.BytesIO()
+        sf.write(buf, audio_data, 16000, format="WAV")
+        buf.seek(0)
+        return buf.read()
 
-        result = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
-        return result[0].strip() if result else ""
-
-    def _run_inference_long_form(self, audio_data) -> str:
-        """Split audio into overlapping 30s windows, transcribe each, concatenate.
-
-        AutoProcessor hard-caps inputs at 480,000 samples (30s). Splitting here —
-        before the processor — prevents silent truncation of longer recordings.
-        """
-        if len(audio_data) <= _CHUNK_SAMPLES:
-            return self._run_inference_chunk(audio_data)
-
-        parts = []
-        start = 0
-        chunk_num = 0
-        while start < len(audio_data):
-            end = min(start + _CHUNK_SAMPLES, len(audio_data))
-            chunk_duration = (end - start) / 16000
-            logger.info(f"Transcribing window {chunk_num + 1}: {start/16000:.1f}s–{end/16000:.1f}s ({chunk_duration:.1f}s)")
-
-            text = self._run_inference_chunk(audio_data[start:end])
-            if text:
-                parts.append(text)
-
-            chunk_num += 1
-            if end == len(audio_data):
-                break
-            start += _CHUNK_SAMPLES - _STRIDE_SAMPLES  # advance with overlap
-
-        return " ".join(parts)
+    async def _call_sarvam(
+        self, audio_bytes: bytes, filename: str = "audio.wav", mime: str = "audio/wav"
+    ) -> str:
+        """POST one audio file to Sarvam STT endpoint, return transcript string."""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                self.endpoint,
+                headers={"api-subscription-key": self.api_key},
+                files={"file": (filename, audio_bytes, mime)},
+                data={"model": self.model, "language_code": self.language_code},
+                timeout=60.0,
+            )
+            response.raise_for_status()
+            return response.json().get("transcript", "")
 
     async def transcribe(self, audio_bytes: bytes, content_type: str) -> str:
-        """Transcribe full audio of any length via manual 30s windowing."""
-        if self.model is None:
-            self._load_model()
-
+        """Full audio transcription: split into ≤25s WAV windows, stitch results."""
         try:
             audio_data = self._load_audio(audio_bytes, content_type)
             duration_s = len(audio_data) / 16000
-            n_windows = max(1, int((len(audio_data) - _STRIDE_SAMPLES) / (_CHUNK_SAMPLES - _STRIDE_SAMPLES)) + 1) if len(audio_data) > _CHUNK_SAMPLES else 1
-            logger.info(f"Starting long-form transcription: {duration_s:.1f}s → {n_windows} window(s)")
+            logger.info(f"Starting transcription: {duration_s:.1f}s audio")
 
-            transcript = self._run_inference_long_form(audio_data)
+            if len(audio_data) <= _CHUNK_SAMPLES:
+                transcript = await self._call_sarvam(self._audio_to_wav_bytes(audio_data))
+                logger.info(f"Transcription complete: {len(transcript)} chars")
+                return transcript
 
+            parts = []
+            start = 0
+            window = 0
+            while start < len(audio_data):
+                end = min(start + _CHUNK_SAMPLES, len(audio_data))
+                window += 1
+                logger.info(
+                    f"Transcribing window {window}: {start/16000:.1f}s–{end/16000:.1f}s"
+                )
+                wav_bytes = self._audio_to_wav_bytes(audio_data[start:end])
+                text = await self._call_sarvam(wav_bytes)
+                if text:
+                    parts.append(text)
+                if end == len(audio_data):
+                    break
+                start += _CHUNK_SAMPLES - _STRIDE_SAMPLES
+
+            transcript = " ".join(parts)
             logger.info(f"Transcription complete: {len(transcript)} chars")
             return transcript
-        except Exception as e:
-            logger.error(f"Transcription failed: {str(e)}", exc_info=True)
-            raise ValueError(f"Transcription failed: {str(e)}")
+        except httpx.HTTPError as e:
+            logger.error(f"Sarvam API error: {e}", exc_info=True)
+            raise ValueError(f"Transcription failed: {e}")
 
     async def transcribe_chunk(self, audio_bytes: bytes, content_type: str) -> str:
-        """Transcribe a short audio chunk (~10s). Fast path for real-time recording."""
-        if self.model is None:
-            self._load_model()
-
+        """Live chunk transcription: send raw WebM bytes directly (≤25s, within 30s limit)."""
         try:
-            audio_data = self._load_audio(audio_bytes, content_type)
-            duration_s = len(audio_data) / 16000
-            logger.info(f"Transcribing {duration_s:.1f}s chunk")
-
-            transcript = self._run_inference_chunk(audio_data)
-
+            suffix = _CONTENT_TYPE_SUFFIX.get(content_type, ".webm")
+            transcript = await self._call_sarvam(
+                audio_bytes, filename=f"chunk{suffix}", mime=content_type
+            )
             logger.info(f"Chunk transcription complete: {len(transcript)} chars")
             return transcript
-        except Exception as e:
-            logger.error(f"Chunk transcription failed: {str(e)}", exc_info=True)
-            raise ValueError(f"Chunk transcription failed: {str(e)}")
+        except httpx.HTTPError as e:
+            logger.error(f"Sarvam API chunk error: {e}", exc_info=True)
+            raise ValueError(f"Chunk transcription failed: {e}")
 
 
 def get_transcription_provider() -> TranscriptionProvider:
-    """Get transcription provider (cached singleton).
-
-    The model is loaded once on first request and stays in memory, avoiding
-    repeated loading across multiple worker processes on memory-constrained servers.
-    """
+    """Get transcription provider (cached singleton)."""
     global _provider_instance
-
-    provider_name = settings.TRANSCRIPTION_PROVIDER
-    if provider_name not in ("local", "huggingface"):
-        raise ValueError(f"Unknown transcription provider: {provider_name}")
-
     if _provider_instance is None:
-        _provider_instance = LocalWhisperProvider()
-
+        _provider_instance = SarvamAIProvider()
     return _provider_instance

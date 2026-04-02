@@ -351,7 +351,7 @@ async def test_transcribe_success(client):
     }
 
     with patch(
-        "src.core.transcription.LocalWhisperProvider.transcribe",
+        "src.core.transcription.SarvamAIProvider.transcribe",
         new_callable=AsyncMock,
         return_value=mock_raw_transcript,
     ), patch(
@@ -747,7 +747,7 @@ async def test_transcribe_chunk_success(client):
     mock_chunk_transcript = "Patient reports chest pain for three days."
 
     with patch(
-        "src.core.transcription.LocalWhisperProvider.transcribe_chunk",
+        "src.core.transcription.SarvamAIProvider.transcribe_chunk",
         new_callable=AsyncMock,
         return_value=mock_chunk_transcript,
     ):

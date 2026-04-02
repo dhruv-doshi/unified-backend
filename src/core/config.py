@@ -49,15 +49,10 @@ class Settings(BaseSettings):
     # Research Digest
     ARXIV_MAX_RESULTS: int = 50
 
-    # Transcription
-    # Model loaded locally via transformers library (no external API needed)
-    # Popular options:
-    # - "Oriserve/Whisper-Hindi2Hinglish-Swift" (Hindi/Hinglish, recommended)
-    # - "openai/whisper-base" (English, smaller, fast)
-    # - "openai/whisper-small" (English, larger, more accurate)
-    # - "openai/whisper-tiny" (English, very small, very fast)
-    TRANSCRIPTION_PROVIDER: str = "local"  # Provider type (currently only "local")
-    TRANSCRIPTION_MODEL: str = "Oriserve/Whisper-Hindi2Hinglish-Swift"  # Model to load
+    # Sarvam AI (Speech-to-Text)
+    # Get your API key at: https://dashboard.sarvam.ai
+    SARVAM_API_KEY: str = ""
+    SARVAM_LANGUAGE_CODE: str = "unknown"  # "unknown" = auto-detect; or "hi-IN", "en-IN", etc.
     TRANSCRIPTION_MAX_FILE_SIZE_MB: int = 25
 
     @field_validator("SECRET_KEY")
