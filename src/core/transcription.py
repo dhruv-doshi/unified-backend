@@ -7,6 +7,9 @@ from src.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Global provider instance — loaded once, shared across all requests
+_provider_instance: "LocalWhisperProvider | None" = None
+
 _CONTENT_TYPE_SUFFIX = {
     "audio/webm": ".webm",
     "audio/wav": ".wav",
@@ -176,14 +179,18 @@ class LocalWhisperProvider(TranscriptionProvider):
 
 
 def get_transcription_provider() -> TranscriptionProvider:
-    """Factory function to get transcription provider based on config."""
-    providers = {
-        "local": LocalWhisperProvider,
-        "huggingface": LocalWhisperProvider,  # HF models loaded locally
-    }
+    """Get transcription provider (cached singleton).
+
+    The model is loaded once on first request and stays in memory, avoiding
+    repeated loading across multiple worker processes on memory-constrained servers.
+    """
+    global _provider_instance
 
     provider_name = settings.TRANSCRIPTION_PROVIDER
-    if provider_name not in providers:
+    if provider_name not in ("local", "huggingface"):
         raise ValueError(f"Unknown transcription provider: {provider_name}")
 
-    return providers[provider_name]()
+    if _provider_instance is None:
+        _provider_instance = LocalWhisperProvider()
+
+    return _provider_instance
